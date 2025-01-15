@@ -38,13 +38,28 @@ type Processor struct {
 	expHistogramLookup map[identity.Stream]pmetric.ExponentialHistogramDataPoint
 	summaryLookup      map[identity.Stream]pmetric.SummaryDataPoint
 
-	config *Config
+	config          *Config
+	rulesMap        map[string]*ruleMapStruct
+	minTimeInterval time.Duration
 
 	nextConsumer consumer.Metrics
 }
 
+type ruleMapStruct struct {
+	rule         Rule
+	lastReported time.Time
+}
+
 func newProcessor(config *Config, log *zap.Logger, nextConsumer consumer.Metrics) *Processor {
 	ctx, cancel := context.WithCancel(context.Background())
+
+	rulesMap := make(map[string]*ruleMapStruct)
+	for _, rule := range config.Rules {
+		rulesMap[rule.Name] = &ruleMapStruct{
+			rule:         rule,
+			lastReported: time.Now(),
+		}
+	}
 
 	return &Processor{
 		ctx:    ctx,
@@ -62,14 +77,23 @@ func newProcessor(config *Config, log *zap.Logger, nextConsumer consumer.Metrics
 		expHistogramLookup: map[identity.Stream]pmetric.ExponentialHistogramDataPoint{},
 		summaryLookup:      map[identity.Stream]pmetric.SummaryDataPoint{},
 
-		config: config,
+		config:   config,
+		rulesMap: rulesMap,
 
 		nextConsumer: nextConsumer,
 	}
 }
 
 func (p *Processor) Start(_ context.Context, _ component.Host) error {
-	exportTicker := time.NewTicker(p.config.Interval)
+	// Find the smallest time interval of all rules
+	timeInterval := p.config.Interval
+	for _, rule := range p.config.Rules {
+		if timeInterval > rule.Interval {
+			timeInterval = rule.Interval
+		}
+	}
+	exportTicker := time.NewTicker(timeInterval)
+	p.minTimeInterval = timeInterval
 	go func() {
 		for {
 			select {
@@ -97,12 +121,22 @@ func (p *Processor) Capabilities() consumer.Capabilities {
 func (p *Processor) ConsumeMetrics(ctx context.Context, md pmetric.Metrics) error {
 	var errs error
 
+	currentTime := time.Now()
 	p.stateLock.Lock()
 	defer p.stateLock.Unlock()
 
 	md.ResourceMetrics().RemoveIf(func(rm pmetric.ResourceMetrics) bool {
 		rm.ScopeMetrics().RemoveIf(func(sm pmetric.ScopeMetrics) bool {
 			sm.Metrics().RemoveIf(func(m pmetric.Metric) bool {
+				rms, ok := p.rulesMap[m.Name()]
+				if ok {
+					//  handle according to rule
+					if currentTime.After((rms.lastReported.Add(rms.rule.Interval))) {
+						rms.lastReported = currentTime
+						return false
+					}
+					return true
+				}
 				switch m.Type() {
 				case pmetric.MetricTypeSummary:
 					if p.config.PassThrough.Summary {

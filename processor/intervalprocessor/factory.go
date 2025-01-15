@@ -30,6 +30,7 @@ func createDefaultConfig() component.Config {
 			Gauge:   false,
 			Summary: false,
 		},
+		Rules: []Rule{},
 	}
 }
 

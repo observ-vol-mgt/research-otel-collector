@@ -1,7 +1,7 @@
 FROM alpine:latest AS prep
 RUN apk --update add ca-certificates
 
-FROM scratch
+FROM ubuntu
 
 ARG USER_UID=10001
 ARG USER_GID=10001
