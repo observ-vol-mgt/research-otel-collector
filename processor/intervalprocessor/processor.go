@@ -131,7 +131,7 @@ func (p *Processor) ConsumeMetrics(ctx context.Context, md pmetric.Metrics) erro
 				rms, ok := p.rulesMap[m.Name()]
 				if ok {
 					//  handle according to rule
-					if currentTime.After((rms.lastReported.Add(rms.rule.Interval))) {
+					if currentTime.Add(p.minTimeInterval).After(rms.lastReported.Add(rms.rule.Interval)) {
 						rms.lastReported = currentTime
 						return false
 					}
