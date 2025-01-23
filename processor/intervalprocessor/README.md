@@ -75,3 +75,25 @@ At the next `interval` (15s by default), the processor would pass the following 
 
 > [!IMPORTANT]
 > After exporting, any internal state is cleared. So if no new metrics come in, the next interval will export nothing.
+
+
+## Different sampling rate for specific metrics
+The interval processor has been extended to allow specifying different sampling rates for different metrics.
+The syntax to specify these are as follows.
+```yaml
+intervalprocessor:
+  [ interval: <duration> | default = 60s ]
+  pass_through:
+    [ gauge: <bool> | default = false ]
+    [ summary: <boo>l | default = false ]
+  [ rules:
+    - name: <metric_name1>
+      interval: <duration>
+    - name: <metric_name2>
+      interval: <duration>
+    ...
+  ]
+```
+If a metric name matches one of the rules, then its corresponding interval is used.
+If a metric name does not match any of the rules, then the default behaviour of the interval processor is used.
+
